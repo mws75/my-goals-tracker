@@ -1,0 +1,8 @@
+{
+  "name": "my-goals",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vercel/blob": "^0.23.1"
+  }
+}
