@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Goals</title>
+    <style>
+      :root {
+        --bg: #f7f7fb;
+        --ink: #1f2430;
+        --blue: #a7d0ff;
+        --blue-dark: #8cbdf5;
+        --green: #b6e7b3;
+        --green-dark: #9ad79a;
+        --pink: #f7b8b8;
+        --pink-dark: #eea1a1;
+        --card: #ffffff;
+        --shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+        --radius: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto,
+          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--ink);
+        background: radial-gradient(
+            1200px 600px at 20% -20%,
+            #eef6ff,
+            transparent 50%
+          ),
+          radial-gradient(900px 500px at 120% 0%, #fff5f7, transparent 40%),
+          var(--bg);
+      }
+
+      .wrap {
+        max-width: 820px;
+        margin: 40px auto;
+        padding: 0 20px;
+      }
+
+      h1 {
+        text-align: center;
+        font-size: 44px;
+        margin: 8px 0 24px;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 120px 120px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      input[type="text"],
+      input[type="number"] {
+        width: 100%;
+        padding: 14px 16px;
+        border: 2px solid #d9dce6;
+        border-radius: var(--radius);
+        font-size: 16px;
+        outline: none;
+        background: #fff;
+        transition: border-color 0.2s ease;
+      }
+      input[type="text"]::placeholder {
+        color: #a1a7b3;
+      }
+      input[type="text"]:focus,
+      input[type="number"]:focus {
+        border-color: #9fb8ff;
+      }
+
+      .btn {
+        cursor: pointer;
+        border: none;
+        padding: 12px 14px;
+        border-radius: var(--radius);
+        font-weight: 600;
+        font-size: 16px;
+        box-shadow: var(--shadow);
+        transition: transform 0.02s ease-in;
+      }
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      .btn-priority {
+        background: var(--green);
+      }
+      .btn-create {
+        background: var(--green);
+      }
+
+      .list {
+        margin-top: 28px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .item {
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        gap: 14px;
+        align-items: stretch;
+      }
+
+      .chip {
+        background: var(--blue);
+        border: 2px solid var(--blue-dark);
+        border-radius: var(--radius);
+        padding: 14px 18px;
+        font-size: 20px;
+        font-weight: 700;
+        box-shadow: var(--shadow);
+      }
+
+      .delete {
+        background: var(--pink);
+        border: 2px solid var(--pink-dark);
+      }
+
+      .muted {
+        color: #6b7280;
+        font-size: 14px;
+        text-align: center;
+        margin-top: 12px;
+      }
+
+      .footer {
+        margin-top: 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .link {
+        color: #6b7280;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      @media (max-width: 560px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+        .item {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>My Goals</h1>
+
+      <form id="goal-form" class="controls" autocomplete="off">
+        <input id="goal-input" type="text" placeholder="Goal..." required />
+        <input
+          id="priority-input"
+          type="number"
+          min="1"
+          inputmode="numeric"
+          placeholder="Priority"
+        />
+        <button class="btn btn-create" type="submit">Create</button>
+      </form>
+
+      <div id="list" class="list" aria-live="polite"></div>
+
+      <div class="footer">
+        <div class="muted">Items are saved to your browser (localStorage).</div>
+        <button
+          id="clear-all"
+          class="btn delete"
+          type="button"
+          title="Remove all items"
+        >
+          Clear All
+        </button>
+      </div>
+    </div>
+
+    <script>
+      // ---- Storage helpers ----
+      const STORAGE_KEY = "my-goals-v1";
+      const load = () => {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        } catch {
+          return [];
+        }
+      };
+      const save = (items) =>
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+
+      // ---- App state ----
+      let items = load();
+
+      // ---- DOM refs ----
+      const $form = document.getElementById("goal-form");
+      const $goal = document.getElementById("goal-input");
+      const $prio = document.getElementById("priority-input");
+      const $list = document.getElementById("list");
+      const $clear = document.getElementById("clear-all");
+
+      // ---- Render ----
+      function render() {
+        $list.innerHTML = "";
+        if (!items.length) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.textContent = "No goals yet — add your first one above!";
+          $list.appendChild(p);
+          return;
+        }
+        items.forEach((text, idx) => {
+          const row = document.createElement("div");
+          row.className = "item";
+
+          const chip = document.createElement("div");
+          chip.className = "chip";
+          chip.textContent = `${idx + 1}. ${text}`;
+
+          const del = document.createElement("button");
+          del.className = "btn delete";
+          del.type = "button";
+          del.textContent = "Delete";
+          del.addEventListener("click", () => {
+            items.splice(idx, 1);
+            save(items);
+            render();
+          });
+
+          row.appendChild(chip);
+          row.appendChild(del);
+          $list.appendChild(row);
+        });
+      }
+
+      // ---- Insert with priority logic ----
+      function insertWithPriority(text, priority) {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+
+        let index = items.length; // default append
+        if (Number.isFinite(priority) && priority >= 1) {
+          index = Math.min(items.length, Math.max(0, Math.floor(priority) - 1));
+        }
+        items.splice(index, 0, trimmed);
+        save(items);
+        render();
+      }
+
+      // ---- Events ----
+      $form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = $goal.value;
+        const p = $prio.value === "" ? NaN : Number($prio.value);
+        insertWithPriority(text, p);
+        $goal.value = "";
+        $prio.value = "";
+        $goal.focus();
+      });
+
+      $clear.addEventListener("click", () => {
+        if (items.length === 0) return;
+        if (confirm("Clear all goals?")) {
+          items = [];
+          save(items);
+          render();
+        }
+      });
+
+      // Initial paint
+      render();
+    </script>
+  </body>
+</html>
