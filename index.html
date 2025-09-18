@@ -137,6 +137,8 @@
       .footer {
         margin-top: 18px;
         display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
         justify-content: space-between;
         align-items: center;
       }
@@ -144,6 +146,10 @@
         color: #6b7280;
         text-decoration: underline;
         cursor: pointer;
+      }
+      .sync {
+        font-size: 13px;
+        color: #6b7280;
       }
 
       @media (max-width: 560px) {
@@ -175,7 +181,12 @@
       <div id="list" class="list" aria-live="polite"></div>
 
       <div class="footer">
-        <div class="muted">Items are saved to your browser (localStorage).</div>
+        <div class="muted">Saved locally and synced via Vercel Blob.</div>
+        <div class="sync" id="sync-info"></div>
+        <div style="flex: 1"></div>
+        <button id="change-id" class="btn" type="button" title="Change sync ID">
+          Change Sync ID
+        </button>
         <button
           id="clear-all"
           class="btn delete"
@@ -188,29 +199,31 @@
     </div>
 
     <script>
-      // ---- Storage helpers ----
+      // ===== Local storage helpers =====
       const STORAGE_KEY = "my-goals-v1";
-      const load = () => {
+      const loadLocal = () => {
         try {
           return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
         } catch {
           return [];
         }
       };
-      const save = (items) =>
+      let saveLocal = (items) =>
         localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 
-      // ---- App state ----
-      let items = load();
+      // ===== App state =====
+      let items = loadLocal();
 
-      // ---- DOM refs ----
+      // ===== DOM refs =====
       const $form = document.getElementById("goal-form");
       const $goal = document.getElementById("goal-input");
       const $prio = document.getElementById("priority-input");
       const $list = document.getElementById("list");
       const $clear = document.getElementById("clear-all");
+      const $changeId = document.getElementById("change-id");
+      const $syncInfo = document.getElementById("sync-info");
 
-      // ---- Render ----
+      // ===== Render =====
       function render() {
         $list.innerHTML = "";
         if (!items.length) {
@@ -244,7 +257,7 @@
         });
       }
 
-      // ---- Insert with priority logic ----
+      // ===== Insert with priority logic =====
       function insertWithPriority(text, priority) {
         const trimmed = text.trim();
         if (!trimmed) return;
@@ -258,7 +271,87 @@
         render();
       }
 
-      // ---- Events ----
+      // ===== Remote sync (Vercel Blob via /api) =====
+      const PROFILE_KEY = "goals_profile_id";
+      function promptForId(existing) {
+        const input = prompt(
+          "Pick a sync ID (e.g., your email or a passphrase). Anyone with this ID can read it.\n\nCurrent: " +
+            (existing || "(none)")
+        );
+        return input && input.trim();
+      }
+      function getProfileId() {
+        let id = localStorage.getItem(PROFILE_KEY);
+        if (!id) {
+          id = promptForId();
+          if (id) localStorage.setItem(PROFILE_KEY, id);
+        }
+        return id;
+      }
+
+      let PROFILE_ID = getProfileId();
+
+      function setSyncInfo(state) {
+        if (!PROFILE_ID) {
+          $syncInfo.textContent = "Sync: disabled (no ID)";
+          return;
+        }
+        const map = {
+          idle: `Sync ID: ${PROFILE_ID}`,
+          loading: `Syncing… (${PROFILE_ID})`,
+          error: `Sync error — using local copy (${PROFILE_ID})`,
+        };
+        $syncInfo.textContent = map[state] || map.idle;
+      }
+
+      async function remoteLoad() {
+        if (!PROFILE_ID) return;
+        setSyncInfo("loading");
+        try {
+          const r = await fetch(
+            `/api/load?id=${encodeURIComponent(PROFILE_ID)}`
+          );
+          const data = await r.json();
+          if (Array.isArray(data.items)) {
+            items = data.items;
+            saveLocal(items);
+            render();
+          }
+          setSyncInfo("idle");
+        } catch (e) {
+          setSyncInfo("error");
+        }
+      }
+
+      async function remoteSave() {
+        if (!PROFILE_ID) return;
+        setSyncInfo("loading");
+        try {
+          await fetch("/api/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: PROFILE_ID, items }),
+          });
+          setSyncInfo("idle");
+        } catch (e) {
+          setSyncInfo("error");
+        }
+      }
+
+      // Debounce network saves a bit
+      let saveTimer;
+      const remoteSaveDebounced = () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(remoteSave, 300);
+      };
+
+      // Override local save to also sync
+      let save = (arr) => {
+        saveLocal(arr);
+        remoteSaveDebounced();
+      };
+
+      // ===== Events =====
       $form.addEventListener("submit", (e) => {
         e.preventDefault();
         const text = $goal.value;
@@ -278,8 +371,19 @@
         }
       });
 
-      // Initial paint
+      $changeId.addEventListener("click", async () => {
+        const next = promptForId(PROFILE_ID);
+        if (!next) return;
+        PROFILE_ID = next;
+        localStorage.setItem(PROFILE_KEY, PROFILE_ID);
+        setSyncInfo("idle");
+        await remoteLoad();
+      });
+
+      // Initial paint + initial remote pull
       render();
+      setSyncInfo("idle");
+      remoteLoad();
     </script>
   </body>
 </html>
